@@ -1,0 +1,2 @@
+Namespace(arch='large_hourglass', batch_size=48, ckpt_dir='./ckpt/test', data_dir='/mnt/f/DL_Data/image_detection', dataset='coco', dist=False, img_size=511, local_rank=0, log_dir='./logs/test', log_interval=100, log_name='test', lr=0.00025, lr_step=[45, 60], num_epochs=70, num_workers=2, root_dir='./', split_ratio=1.0, val_interval=5) [2022-06-16 08:31:26,372]
+Setting up data... [2022-06-16 08:31:26,604]
