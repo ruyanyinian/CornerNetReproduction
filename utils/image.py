@@ -136,38 +136,38 @@ def gaussian2D(shape, sigma=1):
   return h
 
 
-def draw_gaussian(heatmap, center, radius, k=1):
-  diameter = 2 * radius + 1
-  gaussian = gaussian2D((diameter, diameter), sigma=diameter / 6)
+def draw_gaussian(heatmap, center, radius, k=1): # center(27,22), heatmap(128, 128), radius=10
+  diameter = 2 * radius + 1 #  diameter是直径
+  gaussian = gaussian2D((diameter, diameter), sigma=diameter / 6)  # shape是(21, 21)
 
-  x, y = center
+  x, y = center  # center也就是corner的圆圈的中心点, x=27, y=22
 
-  height, width = heatmap.shape[0:2]
+  height, width = heatmap.shape[0:2] # (128, 128)
 
-  left, right = min(x, radius), min(width - x, radius + 1)
-  top, bottom = min(y, radius), min(height - y, radius + 1)
+  left, right = min(x, radius), min(width - x, radius + 1)  # right=11, left=10
+  top, bottom = min(y, radius), min(height - y, radius + 1)  # bottom=11, top=10
 
-  masked_heatmap = heatmap[y - top:y + bottom, x - left:x + right]
-  masked_gaussian = gaussian[radius - top:radius + bottom, radius - left:radius + right]
+  masked_heatmap = heatmap[y - top:y + bottom, x - left:x + right]  # heatmap[22-10 : 22 + 11, 27 - 10 : 27 + 11], shape(21,21), 里面的值都是0
+  masked_gaussian = gaussian[radius - top:radius + bottom, radius - left:radius + right]  # gaussian[10-10:10+11,10-10:10+11], shape(21,21)
   np.maximum(masked_heatmap, masked_gaussian * k, out=masked_heatmap)
 
 
 def gaussian_radius(det_size, min_overlap):
-  height, width = det_size # 其中的height = 12, width = 3, min_overlap = 0.3
+  height, width = det_size  # 其中的height = 12, width = 3, min_overlap = 0.3
 
-  a1 = 1
+  a1 = 1  # 情况三：预测的框和GTbox两个角点以r为半径的圆一个边内切，一个边外切。
   b1 = (height + width)
   c1 = width * height * (1 - min_overlap) / (1 + min_overlap)
   sq1 = np.sqrt(b1 ** 2 - 4 * a1 * c1)
   r1 = (b1 - sq1) / (2 * a1)
 
-  a2 = 4
+  a2 = 4  # 情况二：预测的框和GTbox两个角点以r为半径的圆内切
   b2 = 2 * (height + width)
   c2 = (1 - min_overlap) * width * height
   sq2 = np.sqrt(b2 ** 2 - 4 * a2 * c2)
   r2 = (b2 - sq2) / (2 * a2)
 
-  a3 = 4 * min_overlap
+  a3 = 4 * min_overlap  # 情况1：预测的框和GTbox两个角点以r为半径的圆外切。
   b3 = -2 * min_overlap * (height + width)
   c3 = (min_overlap - 1) * width * height
   # print(b3 ** 2 - 4 * a3 * c3)

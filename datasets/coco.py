@@ -179,35 +179,35 @@ class COCO(Dataset):
     ind_masks[:num_objs] = 1  # (128), 把那些有物体的设置成1.
 
     for i, ((xtl, ytl, xbr, ybr), label) in enumerate(zip(bboxes, labels)):
-      fxtl = (xtl * self.fmap_size['w'] / self.img_size['w'])  # xtl(top-left的x坐标) = 298 * 128 / 511, fxtl = 74, 这个让让top-left的x坐标映射到w=128的heatmap尺寸下
-      fytl = (ytl * self.fmap_size['h'] / self.img_size['h'])  # top-left的y坐标也是映射到h=128的维度下, fytl=40.00209150326798
-      fxbr = (xbr * self.fmap_size['w'] / self.img_size['w'])  # bottom-right的y坐标也是如此, fxbr = 77
-      fybr = (ybr * self.fmap_size['h'] / self.img_size['h'])  # fybr = 51.04104575163398
+      fxtl = (xtl * self.fmap_size['w'] / self.img_size['w'])  # xtl(top-left的x坐标) = 298 * 128 / 511, fxtl = 27.85, 这个让让top-left的x坐标映射到w=128的heatmap尺寸下
+      fytl = (ytl * self.fmap_size['h'] / self.img_size['h'])  # top-left的y坐标也是映射到h=128的维度下, fytl=22.97
+      fxbr = (xbr * self.fmap_size['w'] / self.img_size['w'])  # bottom-right的y坐标也是如此, fxbr = 74.29
+      fybr = (ybr * self.fmap_size['h'] / self.img_size['h'])  # fybr = 70.1
 
-      ixtl = int(fxtl)  # top left x = 74
-      iytl = int(fytl)  # top right y = 40
-      ixbr = int(fxbr)  # bottom right x = 77
-      iybr = int(fybr)  # bottom right y = 51
+      ixtl = int(fxtl)  # top left x = 27
+      iytl = int(fytl)  # top right y = 22
+      ixbr = int(fxbr)  # bottom right x = 74
+      iybr = int(fybr)  # bottom right y = 70
 
       if self.gaussian:
         width = xbr - xtl  # 绝对坐标 bottom-right的x坐标和绝对坐标的 top-left的x坐标的差值. width = 11
         height = ybr - ytl
 
-        width = math.ceil(width * self.fmap_size['w'] / self.img_size['w'])  # 绝对坐标w映射到heatmap的坐标下, width = 3
-        height = math.ceil(height * self.fmap_size['h'] / self.img_size['h'])  # 绝对坐标的height映射到heatmap, height = 12
-
+        width = math.ceil(width * self.fmap_size['w'] / self.img_size['w'])  # 绝对坐标w映射到heatmap的坐标下, width = 22
+        height = math.ceil(height * self.fmap_size['h'] / self.img_size['h'])  # 绝对坐标的height映射到heatmap, height = 27
+        # 对于当前的heatmap上的obj_box, 使用长和宽计算高斯的半径
         radius = max(0, int(gaussian_radius((height, width), self.gaussian_iou)))  # 求出高斯散射核的半径, gaussian_iou = 0.3
-
+        # hmap_tl:(80, 128, 128), 并且值都是0, 经过draw gassian之后,hmap_tl或者hmap_br有变化 , label = 41(当前的类别), hmap_tl[label]也就是当前的第41个类别的top-left的heatmap, 是128,128
         draw_gaussian(hmap_tl[label], [ixtl, iytl], radius)
         draw_gaussian(hmap_br[label], [ixbr, iybr], radius)
       else:
         hmap_tl[label, iytl, ixtl] = 1
         hmap_br[label, iybr, ixbr] = 1
-
-      regs_tl[i, :] = [fxtl - ixtl, fytl - iytl]
-      regs_br[i, :] = [fxbr - ixbr, fybr - iybr]
-      inds_tl[i] = iytl * self.fmap_size['w'] + ixtl
-      inds_br[i] = iybr * self.fmap_size['w'] + ixbr
+      # 貌似只是取得小数点部分
+      regs_tl[i, :] = [fxtl - ixtl, fytl - iytl]  # 这里的i是每一个物体的index, [27.85 - 27, 22.97 - 22]
+      regs_br[i, :] = [fxbr - ixbr, fybr - iybr]  # [74.29 - 74, 70.1 - 70]
+      inds_tl[i] = iytl * self.fmap_size['w'] + ixtl  # 22 * 128 + 27
+      inds_br[i] = iybr * self.fmap_size['w'] + ixbr #  70 * 128 + 74
 
     return {'image': image,
             'hmap_tl': hmap_tl, 'hmap_br': hmap_br,
