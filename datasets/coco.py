@@ -168,9 +168,12 @@ class COCO(Dataset):
     hmap_tl = np.zeros((self.num_classes, self.fmap_size['h'], self.fmap_size['w']), dtype=np.float32)  # (80, 128, 128), 针对每一个类别C, top-left heatmap是对关键点top-left的描述, 范围是0~1的
     hmap_br = np.zeros((self.num_classes, self.fmap_size['h'], self.fmap_size['w']), dtype=np.float32)  # (80, 128, 128), 针对每一个类别C, bottom-right heatmap 关键点的描述
 
+    # 这里是构造GT的offset, 到最后用于offset监督
+    # self.max_objs = 128,
     regs_tl = np.zeros((self.max_objs, 2), dtype=np.float32)  # (128, 2). 是记录每一个关键点的top-left的坐标
     regs_br = np.zeros((self.max_objs, 2), dtype=np.float32)  # (128, 2). 是记录每一个关键点的bottom-right的坐标
 
+    # question: 这里是构造GT的embedding相关, 但是自己好像理解的有点问题.
     inds_tl = np.zeros((self.max_objs,), dtype=np.int64)  # 记录每一个top-left关键点的ind
     inds_br = np.zeros((self.max_objs,), dtype=np.int64)  # 记录每一个bottom-right关键点的ind
 
@@ -184,7 +187,8 @@ class COCO(Dataset):
       fxbr = (xbr * self.fmap_size['w'] / self.img_size['w'])  # bottom-right的y坐标也是如此, fxbr = 74.29
       fybr = (ybr * self.fmap_size['h'] / self.img_size['h'])  # fybr = 70.1
 
-      ixtl = int(fxtl)  # top left x = 27
+      # 前面有一个i(比如ixtl中的i), 应该是对 top-left GT做的向下取整, 我们使用int(num),就是对数值进行向下取整.
+      ixtl = int(fxtl)  # top left x = 27,
       iytl = int(fytl)  # top right y = 22
       ixbr = int(fxbr)  # bottom right x = 74
       iybr = int(fybr)  # bottom right y = 70
@@ -203,11 +207,12 @@ class COCO(Dataset):
       else:
         hmap_tl[label, iytl, ixtl] = 1
         hmap_br[label, iybr, ixbr] = 1
-      # 貌似只是取得小数点部分
+      # 这个是计算下采样时候, 损失的精度.
       regs_tl[i, :] = [fxtl - ixtl, fytl - iytl]  # 这里的i是每一个物体的index, [27.85 - 27, 22.97 - 22]
       regs_br[i, :] = [fxbr - ixbr, fybr - iybr]  # [74.29 - 74, 70.1 - 70]
-      inds_tl[i] = iytl * self.fmap_size['w'] + ixtl  # 22 * 128 + 27
-      inds_br[i] = iybr * self.fmap_size['w'] + ixbr #  70 * 128 + 74
+
+      inds_tl[i] = iytl * self.fmap_size['w'] + ixtl  # 22 * 128 + 27, 表示所有物体的embedding vector, 即所有物体的左上角的值
+      inds_br[i] = iybr * self.fmap_size['w'] + ixbr  # 70 * 128 + 74, 表示所有物体的embedding vector,
 
     return {'image': image,
             'hmap_tl': hmap_tl, 'hmap_br': hmap_br,

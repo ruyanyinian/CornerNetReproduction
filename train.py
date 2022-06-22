@@ -37,7 +37,7 @@ parser.add_argument('--data_dir', type=str, default='/mnt/f/DL_Data/image_detect
 parser.add_argument('--log_name', type=str, default='test')
 
 parser.add_argument('--dataset', type=str, default='coco', choices=['coco', 'pascal'])
-parser.add_argument('--arch', type=str, default='large_hourglass')
+parser.add_argument('--arch', type=str, default='tiny_hourglass')
 
 parser.add_argument('--img_size', type=int, default=511)
 parser.add_argument('--split_ratio', type=float, default=1.0)
@@ -45,12 +45,12 @@ parser.add_argument('--split_ratio', type=float, default=1.0)
 parser.add_argument('--lr', type=float, default=2.5e-4)
 parser.add_argument('--lr_step', type=str, default='45,60')
 
-parser.add_argument('--batch_size', type=int, default=48)
+parser.add_argument('--batch_size', type=int, default=1)
 parser.add_argument('--num_epochs', type=int, default=70)
 
 parser.add_argument('--log_interval', type=int, default=100)
 parser.add_argument('--val_interval', type=int, default=5)
-parser.add_argument('--num_workers', type=int, default=2)
+parser.add_argument('--num_workers', type=int, default=1)
 
 cfg = parser.parse_args()
 
@@ -87,17 +87,16 @@ def main():
   print('Setting up data...')
   Dataset = COCO if cfg.dataset == 'coco' else PascalVOC
   train_dataset = Dataset(cfg.data_dir, 'train', split_ratio=cfg.split_ratio, img_size=cfg.img_size)
-  train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset,
-                                                                  num_replicas=num_gpus,
-                                                                  rank=cfg.local_rank)
+  # train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset,
+  #                                                                 num_replicas=num_gpus,
+  #                                                                 rank=cfg.local_rank)
   train_loader = torch.utils.data.DataLoader(train_dataset,
                                              batch_size=cfg.batch_size // num_gpus
                                              if cfg.dist else cfg.batch_size,
                                              shuffle=not cfg.dist,
                                              num_workers=cfg.num_workers,
-                                             pin_memory=True,
-                                             drop_last=True,
-                                             sampler=train_sampler if cfg.dist else None)
+                                             pin_memory=False,
+                                             drop_last=True)
 
   Dataset_eval = COCO_eval if cfg.dataset == 'coco' else PascalVOC_eval
   val_dataset = Dataset_eval(cfg.data_dir, 'val', test_scales=[1.], test_flip=False)
@@ -131,10 +130,22 @@ def main():
     model.train()
     tic = time.perf_counter()
     for batch_idx, batch in enumerate(train_loader):
-      for k in batch:
-        batch[k] = batch[k].to(device=cfg.device, non_blocking=True)
+      # for k in batch:
+      #   batch[k] = batch[k].to(device=cfg.device, non_blocking=True)
 
+      # batch: {'image': image,
+      #  'hmap_tl': hmap_tl, 'hmap_br': hmap_br,
+      #  'regs_tl': regs_tl, 'regs_br': regs_br,
+      #  'inds_tl': inds_tl, 'inds_br': inds_br,
+      #  'ind_masks': ind_masks}
       outputs = model(batch['image'])
+      # 如果batch=2的情况下, 由于是zip(*outputs), 所以输出结果是tuple
+      # hmap_tl = tuple(torch.Size([2, 80, 128, 128])), tuple里面只有一个tensor
+      # hmap_br = tuple(torch.Size([2, 80, 128, 128])), tuple里面只有一个tensor
+      # embd_tl = tuple(torch.Size([2, 1, 128, 128])), tuple里面只有一个tensor
+      # embd_br = tuple(torch.Size([2, 1, 128, 128])), tuple里面只有一个tensor
+      # regs_tl = tuple(torch.Size([2, 2, 128, 128])), tuple里面只有一个tensor
+      # regs_br = tuple(torch.Size([2, 2, 128, 128])), tuple里面只有一个tensor
       hmap_tl, hmap_br, embd_tl, embd_br, regs_tl, regs_br = zip(*outputs)
 
       embd_tl = [_tranpose_and_gather_feature(e, batch['inds_tl']) for e in embd_tl]
@@ -220,7 +231,7 @@ def main():
 
   print('Starting training...')
   for epoch in range(1, cfg.num_epochs + 1):
-    train_sampler.set_epoch(epoch)
+    # train_sampler.set_epoch(epoch)
     train(epoch)
     if cfg.val_interval > 0 and epoch % cfg.val_interval == 0:
       val_map(epoch)
