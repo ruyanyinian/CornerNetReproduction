@@ -95,6 +95,7 @@ class COCO(Dataset):
   def __getitem__(self, index):
     img_id = self.images[index]
     image = cv2.imread(os.path.join(self.img_dir, self.coco.loadImgs(ids=[img_id])[0]['file_name']))
+    print(os.path.join(self.img_dir, self.coco.loadImgs(ids=[img_id])[0]['file_name']))
     annotations = self.coco.loadAnns(ids=self.coco.getAnnIds(imgIds=[img_id]))
 
     labels = np.array([self.cat_ids[anno['category_id']] for anno in annotations])
@@ -173,8 +174,8 @@ class COCO(Dataset):
     regs_tl = np.zeros((self.max_objs, 2), dtype=np.float32)  # (128, 2). 是记录每一个关键点的top-left的坐标
     regs_br = np.zeros((self.max_objs, 2), dtype=np.float32)  # (128, 2). 是记录每一个关键点的bottom-right的坐标
 
-    # question: 这里是构造GT的embedding相关, 但是自己好像理解的有点问题.
-    inds_tl = np.zeros((self.max_objs,), dtype=np.int64)  # 记录每一个top-left关键点的ind
+    # question: 这里是构造GT的embedding相关, 但是这里为什么使用self.max_obj来进行构造呢
+    inds_tl = np.zeros((self.max_objs,), dtype=np.int64)  # array(128)记录每一个top-left关键点的ind
     inds_br = np.zeros((self.max_objs,), dtype=np.int64)  # 记录每一个bottom-right关键点的ind
 
     num_objs = np.array(min(bboxes.shape[0], self.max_objs))  # (22) 这个是第一个annotation里面的box的数量, 有22个, 说明有22个待检测的物体

@@ -33,7 +33,7 @@ parser.add_argument('--local_rank', type=int, default=0)
 parser.add_argument('--dist', action='store_true')
 
 parser.add_argument('--root_dir', type=str, default='./')
-parser.add_argument('--data_dir', type=str, default='/mnt/f/DL_Data/image_detection')
+parser.add_argument('--data_dir', type=str, default='/data/ezxr.qinyu/image_detection')
 parser.add_argument('--log_name', type=str, default='test')
 
 parser.add_argument('--dataset', type=str, default='coco', choices=['coco', 'pascal'])
@@ -45,7 +45,7 @@ parser.add_argument('--split_ratio', type=float, default=1.0)
 parser.add_argument('--lr', type=float, default=2.5e-4)
 parser.add_argument('--lr_step', type=str, default='45,60')
 
-parser.add_argument('--batch_size', type=int, default=1)
+parser.add_argument('--batch_size', type=int, default=2)
 parser.add_argument('--num_epochs', type=int, default=70)
 
 parser.add_argument('--log_interval', type=int, default=100)
@@ -72,7 +72,7 @@ def main():
   print = logger.info
   print(cfg)
 
-  torch.manual_seed(317)
+  # torch.manual_seed(317)
   torch.backends.cudnn.benchmark = True  # disable this if OOM at beginning of training
 
   num_gpus = torch.cuda.device_count()
@@ -82,21 +82,22 @@ def main():
     dist.init_process_group(backend='nccl', init_method='env://',
                             world_size=num_gpus, rank=cfg.local_rank)
   else:
-    cfg.device = torch.device('cuda')
+    cfg.device = torch.device('cuda:2')
 
   print('Setting up data...')
   Dataset = COCO if cfg.dataset == 'coco' else PascalVOC
   train_dataset = Dataset(cfg.data_dir, 'train', split_ratio=cfg.split_ratio, img_size=cfg.img_size)
-  # train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset,
-  #                                                                 num_replicas=num_gpus,
-  #                                                                 rank=cfg.local_rank)
+  train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset,
+                                                                  num_replicas=num_gpus,
+                                                                  rank=cfg.local_rank)
   train_loader = torch.utils.data.DataLoader(train_dataset,
                                              batch_size=cfg.batch_size // num_gpus
                                              if cfg.dist else cfg.batch_size,
                                              shuffle=not cfg.dist,
                                              num_workers=cfg.num_workers,
-                                             pin_memory=False,
-                                             drop_last=True)
+                                             pin_memory=True,
+                                             drop_last=True,
+                                             sampler=train_sampler if cfg.dist else None)
 
   Dataset_eval = COCO_eval if cfg.dataset == 'coco' else PascalVOC_eval
   val_dataset = Dataset_eval(cfg.data_dir, 'val', test_scales=[1.], test_flip=False)
@@ -120,7 +121,7 @@ def main():
                                                 output_device=cfg.local_rank)
   else:
     # todo don't use this, or wrapped it with utils.losses.Loss() !
-    model = nn.DataParallel(model).to(cfg.device)
+    model = model.to(cfg.device)
 
   optimizer = torch.optim.Adam(model.parameters(), cfg.lr)
   lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, cfg.lr_step, gamma=0.1)
@@ -130,8 +131,8 @@ def main():
     model.train()
     tic = time.perf_counter()
     for batch_idx, batch in enumerate(train_loader):
-      # for k in batch:
-      #   batch[k] = batch[k].to(device=cfg.device, non_blocking=True)
+      for k in batch:
+        batch[k] = batch[k].to(device=cfg.device, non_blocking=True)
 
       # batch: {'image': image,
       #  'hmap_tl': hmap_tl, 'hmap_br': hmap_br,
