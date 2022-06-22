@@ -175,12 +175,13 @@ class COCO(Dataset):
     regs_br = np.zeros((self.max_objs, 2), dtype=np.float32)  # (128, 2). 是记录每一个关键点的bottom-right的坐标
 
     # question: 这里是构造GT的embedding相关, 但是这里为什么使用self.max_obj来进行构造呢
+    # 我们用self.max_obj = 128的一维向量是不是说明我们假设Heatmap上的全部都是obj, 然后我们的向量也是整个都是obj
     inds_tl = np.zeros((self.max_objs,), dtype=np.int64)  # array(128)记录每一个top-left关键点的ind
     inds_br = np.zeros((self.max_objs,), dtype=np.int64)  # 记录每一个bottom-right关键点的ind
 
     num_objs = np.array(min(bboxes.shape[0], self.max_objs))  # (22) 这个是第一个annotation里面的box的数量, 有22个, 说明有22个待检测的物体
     ind_masks = np.zeros((self.max_objs,), dtype=np.uint8)  # (128) 把所有的物体先初步设置为0
-    ind_masks[:num_objs] = 1  # (128), 把那些有物体的设置成1.
+    ind_masks[:num_objs] = 1  # (128), 把那些有物体的设置成1. 也就是向量128, value=0的前22个物体设置成1
 
     for i, ((xtl, ytl, xbr, ybr), label) in enumerate(zip(bboxes, labels)):
       fxtl = (xtl * self.fmap_size['w'] / self.img_size['w'])  # xtl(top-left的x坐标) = 298 * 128 / 511, fxtl = 27.85, 这个让让top-left的x坐标映射到w=128的heatmap尺寸下
@@ -212,8 +213,10 @@ class COCO(Dataset):
       regs_tl[i, :] = [fxtl - ixtl, fytl - iytl]  # 这里的i是每一个物体的index, [27.85 - 27, 22.97 - 22]
       regs_br[i, :] = [fxbr - ixbr, fybr - iybr]  # [74.29 - 74, 70.1 - 70]
 
-      inds_tl[i] = iytl * self.fmap_size['w'] + ixtl  # 22 * 128 + 27, 表示所有物体的embedding vector, 即所有物体的左上角的值
-      inds_br[i] = iybr * self.fmap_size['w'] + ixbr  # 70 * 128 + 74, 表示所有物体的embedding vector,
+      # question: 22 * 128 + 27, array(128), 那么这表示每一个物体的top-left值是有一定的数学关系, 但是不知道目前这个数学公式有什么意义
+      # 注意这里并不是把top-left或者bottom-right的点给映射回去, 而是用一种数学关系来描述
+      inds_tl[i] = iytl * self.fmap_size['w'] + ixtl
+      inds_br[i] = iybr * self.fmap_size['w'] + ixbr  # 70 * 128 + 74, array(128)
 
     return {'image': image,
             'hmap_tl': hmap_tl, 'hmap_br': hmap_br,

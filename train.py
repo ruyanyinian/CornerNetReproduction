@@ -72,7 +72,7 @@ def main():
   print = logger.info
   print(cfg)
 
-  # torch.manual_seed(317)
+  torch.manual_seed(100)
   torch.backends.cudnn.benchmark = True  # disable this if OOM at beginning of training
 
   num_gpus = torch.cuda.device_count()
@@ -148,8 +148,8 @@ def main():
       # regs_tl = tuple(torch.Size([2, 2, 128, 128])), tuple里面只有一个tensor
       # regs_br = tuple(torch.Size([2, 2, 128, 128])), tuple里面只有一个tensor
       hmap_tl, hmap_br, embd_tl, embd_br, regs_tl, regs_br = zip(*outputs)
-
-      embd_tl = [_tranpose_and_gather_feature(e, batch['inds_tl']) for e in embd_tl]
+      # 注意batch['inds_tl']是多个batch, 假设batch=2, 那么batch['inds_tl'] = (2,128)
+      embd_tl = [_tranpose_and_gather_feature(e, batch['inds_tl']) for e in embd_tl]  # (2, 128, 80)
       embd_br = [_tranpose_and_gather_feature(e, batch['inds_br']) for e in embd_br]
       regs_tl = [_tranpose_and_gather_feature(r, batch['inds_tl']) for r in regs_tl]
       regs_br = [_tranpose_and_gather_feature(r, batch['inds_br']) for r in regs_br]
