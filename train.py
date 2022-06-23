@@ -149,11 +149,14 @@ def main():
       # regs_br = tuple(torch.Size([2, 2, 128, 128])), tuple里面只有一个tensor
       hmap_tl, hmap_br, embd_tl, embd_br, regs_tl, regs_br = zip(*outputs)
       # 注意batch['inds_tl']是多个batch, 假设batch=2, 那么batch['inds_tl'] = (2,128)
-      embd_tl = [_tranpose_and_gather_feature(e, batch['inds_tl']) for e in embd_tl]  # (2, 128, 80)
+      embd_tl = [_tranpose_and_gather_feature(e, batch['inds_tl']) for e in embd_tl]  # (2, 128, 1), 也就是embedding是一个128维度的向量, 一张图像的所有的
       embd_br = [_tranpose_and_gather_feature(e, batch['inds_br']) for e in embd_br]
       regs_tl = [_tranpose_and_gather_feature(r, batch['inds_tl']) for r in regs_tl]
       regs_br = [_tranpose_and_gather_feature(r, batch['inds_br']) for r in regs_br]
 
+
+      # loss 相关
+      # batch['hmap_tl'] = (80, 128, 128)
       focal_loss = _neg_loss(hmap_tl, batch['hmap_tl']) + \
                    _neg_loss(hmap_br, batch['hmap_br'])
       reg_loss = _reg_loss(regs_tl, batch['regs_tl'], batch['ind_masks']) + \

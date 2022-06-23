@@ -6,19 +6,24 @@ from utils.keypoint import _tranpose_and_gather_feature
 
 
 def _neg_loss(preds, targets):
-  pos_inds = targets == 1  # todo targets > 1-epsilon ?
-  neg_inds = targets < 1  # todo targets < 1-epsilon ?
+  # todo targets > 1-epsilon ?  
+  # target = (2, 80, 128, 128), pred (2, 80, 128, 128), 等于1的那个真实值设置为true
+  pos_inds = targets == 1 
+  # todo targets < 1-epsilon ?
+  # targets < 1也就是不是GT的点,这些点包括高斯函数得到的平滑的label值,这些值是大于0小于1的还有本身是0的点
+  neg_inds = targets < 1  
 
   neg_weights = torch.pow(1 - targets[neg_inds], 4)
 
   loss = 0
   for pred in preds:
-    pred = torch.clamp(torch.sigmoid(pred), min=1e-4, max=1 - 1e-4)
+    pred = torch.clamp(torch.sigmoid(pred), min=1e-4, max=1-1e-4) # torch.clamp是将所以的tensor的点先知道min和max区间
     pos_pred = pred[pos_inds]
     neg_pred = pred[neg_inds]
 
+    # 我们的目的是让pos_loss足够的小, 然后让neg_loss足够的大
     pos_loss = torch.log(pos_pred) * torch.pow(1 - pos_pred, 2)
-    neg_loss = torch.log(1 - neg_pred) * torch.pow(neg_pred, 2) * neg_weights
+    neg_loss = torch.log(1 - neg_pred) * torch.pow(neg_pred, 2) * neg_weights # 这两个公式基本和文章中的一致
 
     num_pos = pos_inds.float().sum()
     pos_loss = pos_loss.sum()
