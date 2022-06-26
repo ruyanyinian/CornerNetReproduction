@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from lib.cpool_new import TopPool, BottomPool, LeftPool, RightPool
+from lib.cpool import TopPool, BottomPool, LeftPool, RightPool
 
 
 class pool(nn.Module):

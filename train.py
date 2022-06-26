@@ -33,7 +33,7 @@ parser.add_argument('--local_rank', type=int, default=0)
 parser.add_argument('--dist', action='store_true')
 
 parser.add_argument('--root_dir', type=str, default='./')
-parser.add_argument('--data_dir', type=str, default='/data/ezxr.qinyu/image_detection')
+parser.add_argument('--data_dir', type=str, default='/mnt/e/data/image_detection')
 parser.add_argument('--log_name', type=str, default='test')
 
 parser.add_argument('--dataset', type=str, default='coco', choices=['coco', 'pascal'])
@@ -82,7 +82,7 @@ def main():
     dist.init_process_group(backend='nccl', init_method='env://',
                             world_size=num_gpus, rank=cfg.local_rank)
   else:
-    cfg.device = torch.device('cuda:2')
+    cfg.device = torch.device('cuda:0')
 
   print('Setting up data...')
   Dataset = COCO if cfg.dataset == 'coco' else PascalVOC
@@ -149,8 +149,13 @@ def main():
       # regs_br = tuple(torch.Size([2, 2, 128, 128])), tuple里面只有一个tensor
       hmap_tl, hmap_br, embd_tl, embd_br, regs_tl, regs_br = zip(*outputs)
       # 注意batch['inds_tl']是多个batch, 假设batch=2, 那么batch['inds_tl'] = (2,128)
-      embd_tl = [_tranpose_and_gather_feature(e, batch['inds_tl']) for e in embd_tl]  # (2, 128, 1), 也就是embedding是一个128维度的向量, 一张图像的所有的
+      # (2, 128, 1), 也就是embedding是一个128维度的向量, 一张图像的所有的
+
+      embd_tl = [_tranpose_and_gather_feature(e, batch['inds_tl']) for e in embd_tl] # batch['inds_tl']=(2,128)
       embd_br = [_tranpose_and_gather_feature(e, batch['inds_br']) for e in embd_br]
+
+      # regs_tl = tuple(torch.Size([2, 2, 128, 128]))
+      # regs_br = tuple(torch.Size([2, 2, 128, 128])), tuple里面只有一个tensor
       regs_tl = [_tranpose_and_gather_feature(r, batch['inds_tl']) for r in regs_tl]
       regs_br = [_tranpose_and_gather_feature(r, batch['inds_br']) for r in regs_br]
 
@@ -159,9 +164,11 @@ def main():
       # batch['hmap_tl'] = (80, 128, 128)
       focal_loss = _neg_loss(hmap_tl, batch['hmap_tl']) + \
                    _neg_loss(hmap_br, batch['hmap_br'])
+
+      # regs_tl
       reg_loss = _reg_loss(regs_tl, batch['regs_tl'], batch['ind_masks']) + \
-                 _reg_loss(regs_br, batch['regs_br'], batch['ind_masks'])
-      pull_loss, push_loss = _ae_loss(embd_tl, embd_br, batch['ind_masks'])
+                 _reg_loss(regs_br, batch['regs_br'], batch['ind_masks'])  # 这一项是offset loss
+      pull_loss, push_loss = _ae_loss(embd_tl, embd_br, batch['ind_masks']) # 计算embedding的
 
       loss = focal_loss + 0.1 * pull_loss + 0.1 * push_loss + reg_loss
 

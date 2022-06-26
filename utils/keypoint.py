@@ -26,7 +26,8 @@ def _tranpose_and_gather_feature(feature, ind): # 假设batch=2, 那么ind就是
   feature = feature.permute(0, 2, 3, 1).contiguous()  # [B, C, H, W] => [B, H, W, C]
   feature = feature.view(feature.size(0), -1, feature.size(3))  # [B, H, W, C] => [B, H x W, C] = (2, 16384, 1)
   ind = ind[:, :, None].expand(ind.shape[0], ind.shape[1], feature.shape[-1])  # [B, num_obj] => [B, num_obj, C], 也就是(2,128) => (2,128,1)
-  feature = feature.gather(1, ind)  # todo 这里的gather函数需要重点理解. [B, H x W, C] => [B, num_obj, C]  (2,128,1)  gather函数是按照索引来取值的
+  # TODO 这里的gather函数需要重点理解. [B, H x W, C] [2, 128*128, 1] => (2,128,1)  gather函数是按照索引来取值的
+  feature = feature.gather(1, ind)
   return feature
 
 
