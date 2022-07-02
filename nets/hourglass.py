@@ -34,7 +34,7 @@ class pool(nn.Module):
 
 
 class convolution(nn.Module):
-  def __init__(self, k, inp_dim, out_dim, stride=1, with_bn=True):
+  def __init__(self, k, inp_dim, out_dim, stride=1, with_bn=True):  # k=7, inp_dim=3, out_dim=128, stride=2
     super(convolution, self).__init__()
 
     pad = (k - 1) // 2
@@ -50,7 +50,7 @@ class convolution(nn.Module):
 
 
 class residual(nn.Module):
-  def __init__(self, k, inp_dim, out_dim, stride=1, with_bn=True):
+  def __init__(self, k, inp_dim, out_dim, stride=1, with_bn=True): # 这里的stride=2
     super(residual, self).__init__()
 
     self.conv1 = nn.Conv2d(inp_dim, out_dim, (3, 3), padding=(1, 1), stride=(stride, stride), bias=False)
@@ -78,7 +78,7 @@ class residual(nn.Module):
 
 
 # inp_dim -> out_dim -> ... -> out_dim
-def make_layer(kernel_size, inp_dim, out_dim, modules, layer, stride=1):
+def make_layer(kernel_size, inp_dim, out_dim, modules, layer, stride=1): # kernel_size=3, inp_dim=256, modules=2, out_dim=256, stride=1, layer=hourglass.residual
   layers = [layer(kernel_size, inp_dim, out_dim, stride=stride)]
   layers += [layer(kernel_size, out_dim, out_dim) for _ in range(modules - 1)]
   return nn.Sequential(*layers)
@@ -100,17 +100,17 @@ def make_kp_layer(cnv_dim, curr_dim, out_dim):
                        nn.Conv2d(curr_dim, out_dim, (1, 1)))
 
 
-class kp_module(nn.Module):
+class kp_module(nn.Module): # dims = [256, 256, 384, 384, 384, 512], modules=[2, 2, 2, 2, 2, 4], n=5
   def __init__(self, n, dims, modules):
     super(kp_module, self).__init__()
 
     self.n = n
 
-    curr_modules = modules[0]
-    next_modules = modules[1]
+    curr_modules = modules[0] # curr_modules=2
+    next_modules = modules[1] # next_modules=2
 
-    curr_dim = dims[0]
-    next_dim = dims[1]
+    curr_dim = dims[0]  # 256
+    next_dim = dims[1]  # 256
 
     # 上支路：重复curr_mod次residual，curr_dim -> curr_dim -> ... -> curr_dim
     self.top = make_layer(3, curr_dim, curr_dim, curr_modules, layer=residual)
@@ -122,44 +122,43 @@ class kp_module(nn.Module):
     # hourglass中间还是一个hourglass
     # 直到递归结束，重复next_mod次residual，next_dim -> next_dim -> ... -> next_dim
     if self.n > 1:
-      self.low2 = kp_module(n - 1, dims[1:], modules[1:])
+      self.low2 = kp_module(n - 1, dims[1:], modules[1:]) # n=5, dims[256, 256, 384, 384, 384, 512]
     else:
       self.low2 = make_layer(3, next_dim, next_dim, next_modules, layer=residual)
     # 重复curr_mod次residual，next_dim -> next_dim -> ... -> next_dim -> curr_dim
-    self.low3 = make_layer_revr(3, next_dim, curr_dim, curr_modules, layer=residual)
+    self.low3 = make_layer_revr(3, next_dim, curr_dim, curr_modules, layer=residual) # curr_modules=2
     # 分辨率在这里X2
     self.up = nn.Upsample(scale_factor=2)
 
   def forward(self, x):
-    up1 = self.top(x)  # 上支路residual
-    down = self.down(x)  # 下支路downsample(并没有)
-    low1 = self.low1(down)  # 下支路residual
-    low2 = self.low2(low1)  # 下支路hourglass
-    low3 = self.low3(low2)  # 下支路residual
-    up2 = self.up(low3)  # 下支路upsample
+    up1 = self.top(x)  # (2, 256, 128, 128) 上支路residual
+    down = self.down(x)  # (2, 256, 128, 128)下支路downsample(并没有)
+    low1 = self.low1(down)  # (2, 128, 64, 64) 下支路residual
+    low2 = self.low2(low1)  # [2, 128, 64, 64]下支路hourglass
+    low3 = self.low3(low2)  # [2, 256, 64, 64]下支路residual
+    up2 = self.up(low3)  # [2, 256, 128, 128]下支路upsample
     return up1 + up2  # 合并上下支路
 
 
-class exkp(nn.Module):
+class exkp(nn.Module): # modules=[2, 2, 2, 2, 2, 4], t
   def __init__(self, n, nstack, dims, modules, num_classes=80, cnv_dim=256):
     super(exkp, self).__init__()
 
-    self.nstack = nstack
+    self.nstack = nstack  # nstack=2
 
-    curr_dim = dims[0]
+    curr_dim = dims[0]  # curr_dim=256
 
-    self.pre = nn.Sequential(convolution(7, 3, 128, stride=2),
-                             residual(3, 128, curr_dim, stride=2))
+    self.pre = nn.Sequential(convolution(7, 3, 128, stride=2), # CONV+BN+RELU
+                             residual(3, 128, curr_dim, stride=2)) # conv1+bn1+relu1+conv2+bn2+skip(x) (2, 128, 256, 256)
 
-    self.kps = nn.ModuleList([kp_module(n, dims, modules) for _ in range(nstack)])
 
+    self.kps = nn.ModuleList([kp_module(n, dims, modules) for _ in range(nstack)]) # n=5, dims = [256, 256, 384, 384, 384, 512], modules = [2, 2, 2, 2, 2, 4]
     self.cnvs = nn.ModuleList([convolution(3, curr_dim, cnv_dim) for _ in range(nstack)])
 
     self.inters = nn.ModuleList([residual(3, curr_dim, curr_dim) for _ in range(nstack - 1)])
 
-    self.inters_ = nn.ModuleList([nn.Sequential(nn.Conv2d(curr_dim, curr_dim, (1, 1), bias=False),
-                                                nn.BatchNorm2d(curr_dim))
-                                  for _ in range(nstack - 1)])
+    self.inters_ = nn.ModuleList([nn.Sequential(nn.Conv2d(curr_dim, curr_dim, (1, 1), bias=False), nn.BatchNorm2d(curr_dim)) for _ in range(nstack - 1)])
+
     self.cnvs_ = nn.ModuleList([nn.Sequential(nn.Conv2d(cnv_dim, curr_dim, (1, 1), bias=False),
                                               nn.BatchNorm2d(curr_dim))
                                 for _ in range(nstack - 1)])
@@ -186,20 +185,20 @@ class exkp(nn.Module):
     self.relu = nn.ReLU(inplace=True)
 
   def forward(self, inputs):
-    inter = self.pre(inputs)
+    inter = self.pre(inputs) # inter (2, 256, 128, 128)
 
     outs = []
-    for ind in range(self.nstack):
-      kp = self.kps[ind](inter)
-      cnv = self.cnvs[ind](kp)
+    for ind in range(self.nstack): # nstack=1
+      kp = self.kps[ind](inter) # [2, 256, 128, 128]
+      cnv = self.cnvs[ind](kp) # [2, 256, 128, 128]
 
       if self.training or ind == self.nstack - 1:
-        cnv_tl = self.cnvs_tl[ind](cnv)
-        cnv_br = self.cnvs_br[ind](cnv)
+        cnv_tl = self.cnvs_tl[ind](cnv) # [2, 256, 128, 128]
+        cnv_br = self.cnvs_br[ind](cnv) # [2, 256, 128, 128]
 
-        hmap_tl, hmap_br = self.hmap_tl[ind](cnv_tl), self.hmap_br[ind](cnv_br)
-        embd_tl, embd_br = self.embd_tl[ind](cnv_tl), self.embd_br[ind](cnv_br)
-        regs_tl, regs_br = self.regs_tl[ind](cnv_tl), self.regs_br[ind](cnv_br)
+        hmap_tl, hmap_br = self.hmap_tl[ind](cnv_tl), self.hmap_br[ind](cnv_br) # [2, 80, 128, 128]
+        embd_tl, embd_br = self.embd_tl[ind](cnv_tl), self.embd_br[ind](cnv_br) # [2, 1, 128, 128]
+        regs_tl, regs_br = self.regs_tl[ind](cnv_tl), self.regs_br[ind](cnv_br) # [2, 2, 128, 128]
 
         outs.append([hmap_tl, hmap_br, embd_tl, embd_br, regs_tl, regs_br])
 
